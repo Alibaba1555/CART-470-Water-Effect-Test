@@ -8,3 +8,9 @@
 .terrain-lines{fill:none;stroke:#788979;stroke-width:.75;opacity:.21;pointer-events:none}
 .terrain-lines path{vector-effect:non-scaling-stroke}
 .scene::after{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;opacity:.065;mix-blend-mode:multiply;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Cpath fill='%23000' filter='url(%23n)' d='M0 0h180v180H0z'/%3E%3C/svg%3E")}
+
+/* Mineral ink wash palette */
+.scene{background:radial-gradient(ellipse at 25% 30%,#dce2d5,transparent 75%),#bbcfc6}
+.land{fill:#f0ebdb;stroke:#e0dccb;stroke-width:1}
+.terrain-lines{opacity:.10}
+.scene::after{opacity:.028}

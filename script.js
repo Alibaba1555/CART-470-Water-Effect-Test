@@ -3,6 +3,7 @@ const scene = document.querySelector('.scene');
 const world = document.querySelector('#world');
 const canvas = document.querySelector('#water');
 const ctx = canvas.getContext('2d');
+const hitContext=document.createElement('canvas').getContext('2d');
 const $ = id => document.getElementById(id);
 const islands = [...document.querySelectorAll('.island')];
 const W=1200,H=800,CELL=8,COLS=W/CELL,ROWS=H/CELL;
@@ -22,9 +23,9 @@ const obstacles=islands.map(el=>{
 });
 function blocked(p,margin=14){
   if(p.x<margin||p.y<margin||p.x>W-margin||p.y>H-margin)return true;
-  ctx.lineWidth=margin*2;
-  return obstacles.some(path=>ctx.isPointInPath(path,p.x,p.y)||
-    (margin>0&&ctx.isPointInStroke(path,p.x,p.y)));
+  hitContext.lineWidth=margin*2;
+  return obstacles.some(path=>hitContext.isPointInPath(path,p.x,p.y)||
+    (margin>0&&hitContext.isPointInStroke(path,p.x,p.y)));
 }
 function clearLine(a,b,margin=14){
   const steps=Math.max(1,Math.ceil(distance(a,b)/3));
@@ -165,6 +166,8 @@ world.addEventListener('click',e=>{
 const fx=new Float32Array(grid.length),fy=new Float32Array(grid.length),wet=new Float32Array(grid.length);
 const solid=Uint8Array.from({length:grid.length},(_,i)=>blocked(cellPoint(i),4)?1:0);
 let tracers=[],flowTime=0,fieldPending=false;
+const washCanvas=document.createElement('canvas');washCanvas.width=COLS;washCanvas.height=ROWS;
+const washContext=washCanvas.getContext('2d');
 const trailCanvas=document.createElement('canvas');trailCanvas.width=W;trailCanvas.height=H;
 const ink=trailCanvas.getContext('2d');
 for(const name of ['width','strength'])$(name).oninput=()=>{
@@ -208,8 +211,8 @@ function rebuildField(){
   }
   for(let i=0;i<grid.length;i++){
     if(solid[i])continue;
-    let sum=0,energy=0,x=0,y=0;
-    for(const c of contributions){const w=c.weights[i];sum+=w;x+=c.vx[i]*w;y+=c.vy[i]*w;energy+=Math.hypot(c.vx[i],c.vy[i])*w;}
+    let sum=0,energy=0,x=0,y=0,peak=0;
+    for(const c of contributions){const w=c.weights[i];sum+=w;peak=Math.max(peak,w);x+=c.vx[i]*w;y+=c.vy[i]*w;energy+=Math.hypot(c.vx[i],c.vy[i])*w;}
     if(sum===0)continue;
     x/=sum;y/=sum;energy/=sum;
     // A shared velocity field merges crossing streams. Opposed streams form lateral shear.
@@ -226,13 +229,20 @@ function rebuildField(){
     const q=cellPoint(i),probe=14;
     if(isSolid(q.x+Math.sign(x)*probe,q.y))x=0;
     if(isSolid(q.x,q.y+Math.sign(y)*probe))y=0;
-    fx[i]=x;fy[i]=y;wet[i]=Math.min(1,sum);
+    fx[i]=x;fy[i]=y;wet[i]=Math.min(1,peak);
   }
+  const wash=washContext.createImageData(COLS,ROWS);
+  for(let i=0;i<wet.length;i++){
+    wash.data[i*4]=54;wash.data[i*4+1]=94;wash.data[i*4+2]=88;
+    wash.data[i*4+3]=Math.round(22*wet[i]);
+  }
+  washContext.putImageData(wash,0,0);
   tracers=[];ink.clearRect(0,0,W,H);
   for(const r of routes){
     const count=Math.min(180,Math.max(28,Math.floor(r.length*r.width/480)));
-    for(let i=0;i<count;i++)tracers.push(seed(r,true));
+    for(let i=0;i<count;i++)tracers.push({...seed(r,true),priority:i/count});
   }
+  tracers.sort((a,b)=>a.priority-b.priority);
 }
 function seed(r,spread=false){
   for(let attempt=0;attempt<15;attempt++){
@@ -292,76 +302,95 @@ function buildEchoLayers(){
     return layer;
   });
 }
-function paintStroke(p,r,index){
-  const points=p.history;if(points.length<3)return;
-  const lifeFade=Math.max(0,Math.min(1,p.age/.8,(p.life-p.age)/1.6));
-  const strength=Math.min(1.5,r.strength);
-  const dark=index%5===0;
-  for(let part=0;part<4;part++){
-    const first=Math.floor((points.length-1)*part/4);
-    const last=Math.floor((points.length-1)*(part+1)/4);
-    if(last<=first)continue;
-    const section=new Path2D();section.moveTo(points[first].x,points[first].y);
-    for(let j=first+1;j<=last;j++)section.lineTo(points[j].x,points[j].y);
-    const envelope=Math.sin((part+.5)/4*Math.PI);
-    const taper=points[last].taper;
-    const alpha=lifeFade*strength*taper*taper*envelope;
-    const width=(index%7===0?4.4:2.1)*( .25+.75*envelope)*(.12+.88*taper);
-    ink.setLineDash([]);
-    ink.strokeStyle=`rgba(29,91,94,${alpha*.06})`;ink.lineWidth=width+5;ink.stroke(section);
-    ink.strokeStyle=dark?`rgba(39,100,103,${alpha*.42})`:`rgba(239,244,220,${alpha*.64})`;
-    ink.lineWidth=width;ink.stroke(section);
-    if(!dark){
-      ink.setLineDash([8+index%11,4+index%7,2,5]);
-      ink.strokeStyle=`rgba(255,252,232,${alpha*.42})`;
-      ink.lineWidth=Math.max(.4,width*.3);ink.stroke(section);
-    }
+function paintPigment(p,r,i){
+  const taper=endFade(r,p);
+  const life=Math.max(0,Math.min(1,p.age/1.4,(p.life-p.age)/1.8));
+  const alpha=life*taper*taper*Math.min(1.2,r.strength)*(p.visibility||0);
+  if(alpha<.02)return;
+  const length=(i%4===0?115:48+(i%5)*11)*(.3+.7*taper);
+  const points=[];let x=p.x,y=p.y;
+  // Integrate a flexible brush stroke through the shared field.
+  for(let j=0;j<=24;j++){
+    const v=velocity(x,y),speed=Math.hypot(v.x,v.y);
+    if(speed<.2||v.w<.002||isSolid(x,y))break;
+    const nx=-v.y/speed,ny=v.x/speed,t=j/24;
+    const wave=Math.sin(t*5-p.age*.85+i*2.3)*Math.sin(Math.PI*t)*2.8;
+    points.push({x:x+nx*wave,y:y+ny*wave,nx,ny});
+    x-=v.x/speed*length/24;y-=v.y/speed*length/24;
   }
-  ink.setLineDash([]);
+  if(points.length<5)return;
+  const edge=(offset,color,thickness)=>{
+    const left=[],right=[];
+    points.forEach((q,j)=>{
+      const t=j/(points.length-1);
+      const width=Math.sin(Math.PI*t)**.8*thickness*taper*(.84+.16*Math.sin(t*17+i));
+      left.push({x:q.x+q.nx*(offset+width),y:q.y+q.ny*(offset+width)});
+      right.push({x:q.x+q.nx*(offset-width),y:q.y+q.ny*(offset-width)});
+    });
+    ink.beginPath();left.forEach((q,j)=>j?ink.lineTo(q.x,q.y):ink.moveTo(q.x,q.y));
+    right.reverse().forEach(q=>ink.lineTo(q.x,q.y));ink.closePath();ink.fillStyle=color;ink.fill();
+  };
+  edge(0,`rgba(47,89,82,${alpha*.26})`,i%4===0?2.4:1.5);
+  edge(2.1,`rgba(247,244,224,${alpha*.66})`,i%4===0?1.9:1.05);
+  // Small, intermittent paper gaps suggest dry-brush texture.
+  if(i%3===0){
+    ink.beginPath();
+    points.forEach((q,j)=>{if(j<5||j>14)return;j===5?ink.moveTo(q.x+q.nx*2,q.y+q.ny*2):ink.lineTo(q.x+q.nx*2,q.y+q.ny*2);});
+    ink.lineWidth=.55;ink.strokeStyle=`rgba(186,207,197,${alpha*.75})`;ink.stroke();
+  }
 }
 function draw(dt){
   if(!echoLayers)echoLayers=buildEchoLayers();
   ctx.clearRect(0,0,W,H);
   if(!paused&&dt>0)flowTime+=dt;
-  echoLayers.forEach((layer,i)=>{
-    ctx.globalAlpha=.45+Math.sin(flowTime*.4+i*2.3)*.12;
-    ctx.drawImage(layer,0,0);
-  });
-  ctx.globalAlpha=1;
-  ink.clearRect(0,0,W,H);ink.lineCap='round';ink.lineJoin='round';
+  echoLayers.forEach((layer,i)=>{ctx.globalAlpha=.2+Math.sin(flowTime*.3+i*2.3)*.05;ctx.drawImage(layer,0,0,W,H);});
+  ctx.globalAlpha=1;ink.clearRect(0,0,W,H);
+  ink.imageSmoothingEnabled=true;ink.drawImage(washCanvas,0,0,W,H);
+  ink.globalCompositeOperation='destination-out';for(const path of obstacles)ink.fill(path);
+  ink.globalCompositeOperation='source-over';ctx.drawImage(trailCanvas,0,0,W,H);
+  ink.clearRect(0,0,W,H);
+  const occupied=new Set();let visible=0;
   const routeMap=new Map(routes.map(r=>[r.id,r]));
   for(let i=0;i<tracers.length;i++){
     const p=tracers[i],r=routeMap.get(p.owner);if(!r||r.strength===0)continue;
-    p.history??=[];p.sampleTime??=0;
     if(!paused&&dt>0&&r.speed>0){
       const v=velocity(p.x,p.y),speed=Math.hypot(v.x,v.y),taper=endFade(r,p);
-      const ripple=Math.sin(p.x*.018+p.y*.011-flowTime*.7)*.065;
-      let nx=p.x+(v.x-v.y*ripple)*dt,ny=p.y+(v.y+v.x*ripple)*dt;
+      let nx=p.x+v.x*dt,ny=p.y+v.y*dt;
       if(isSolid(nx,ny)){
         if(!isSolid(nx,p.y))ny=p.y;else if(!isSolid(p.x,ny))nx=p.x;
         else {tracers[i]=seed(r,true);continue;}
       }
       p.age+=dt;
       if(p.age>p.life||v.w<.004||speed<.3||taper<.006){tracers[i]=seed(r,true);continue;}
-      p.x=nx;p.y=ny;p.sampleTime+=dt;
-      if(p.sampleTime>=.045||!p.history.length){
-        p.history.push({x:nx,y:ny,taper});p.sampleTime=0;
-        if(p.history.length>48+i%25)p.history.shift();
-      }
+      p.x=nx;p.y=ny;
     }
-    paintStroke(p,r,i);
+    const cell=`${Math.floor(p.x/60)},${Math.floor(p.y/44)}`;
+    const admitted=visible<70&&!occupied.has(cell)&&endFade(r,p)>.05;
+    if(admitted){occupied.add(cell);visible++;}
+    if(!paused&&dt>0)p.visibility=(p.visibility||0)+((admitted?1:0)-(p.visibility||0))*(1-Math.exp(-dt*7));
+    if(p.visibility>.015)paintPigment(p,r,i);
   }
   ink.globalCompositeOperation='destination-out';ink.fillStyle='#000';
   for(const path of obstacles)ink.fill(path);
-  ink.globalCompositeOperation='source-over';ctx.drawImage(trailCanvas,0,0);
-  for(const r of routes){marker(r.a,endpointLabel(r.id),'#345f63');marker(r.b,endpointLabel(r.id,1),'#ad7744');}
-  if(start)marker(start,endpointLabel(freeId()),'#345f63');
+  ink.globalCompositeOperation='source-over';ctx.drawImage(trailCanvas,0,0,W,H);
+  const active=routes.find(r=>r.id===selected);
+  if(active){marker(active.a,endpointLabel(active.id),'#34534f');marker(active.b,endpointLabel(active.id,1),'#966945');}
+  if(start)marker(start,endpointLabel(freeId()),'#34534f');
+}
+function updateResolution(){
+  const ratio=Math.max(1,Math.min(3,camera.scale*(globalThis.devicePixelRatio||1)));
+  const width=Math.round(W*ratio),height=Math.round(H*ratio);
+  if(canvas.width!==width||canvas.height!==height){
+    canvas.width=width;canvas.height=height;trailCanvas.width=width;trailCanvas.height=height;
+    ctx.setTransform(width/W,0,0,height/H,0,0);ink.setTransform(width/W,0,0,height/H,0,0);
+  }
 }
 
 function resize(){
   const rect=scene.getBoundingClientRect(),panel=document.querySelector('.controls').getBoundingClientRect();
   camera.scale=Math.min((rect.width-24)/W,(rect.height-panel.height-44)/H);
   camera.scale=Math.max(.12,camera.scale);
+  updateResolution();
 }
 function frame(t){
   const dt=last?Math.min((t-last)/1000,.04):0;last=t;
