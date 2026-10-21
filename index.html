@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Island Prototype</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&display=swap">
   <link rel="stylesheet" href="style.css">
   <script src="script.js" defer></script>
 </head>
@@ -16,7 +17,7 @@
       <button
         class="island active"
         data-island="0"
-        aria-label="Island A"
+        aria-label="Seagull Island — click to reveal name"
         aria-pressed="true"
       >
         <svg viewBox="0 0 1500 980" aria-hidden="true">
@@ -70,7 +71,7 @@
           />
         </svg>
 
-        <span class="island-label">Island A</span>
+        <span class="island-label seagull-hint">Click to discover</span>
       </button>
 
       <button
@@ -95,6 +96,13 @@
 
         <span class="island-label">Island B</span>
       </button>
+      <div id="island-name" class="sea-name" aria-hidden="true">
+        <div class="sea-name-drift">
+          <span class="sea-name-title">Seagull Island</span>
+          <span class="sea-name-reflection" aria-hidden="true">Seagull Island</span>
+          <span class="sea-name-rule" aria-hidden="true">✧</span>
+        </div>
+      </div>
     </div>
 
     <section class="controls" aria-label="Current editor">

@@ -14,3 +14,52 @@
 .land{fill:#f0ebdb;stroke:#e0dccb;stroke-width:1}
 .terrain-lines{opacity:.10}
 .scene::after{opacity:.028}
+
+/* Antique chart lettering: deliberately separate from the interface font. */
+.sea-name{position:absolute;left:400px;top:485px;width:390px;text-align:center;pointer-events:none;opacity:0;z-index:2;--drift-x:0px;--drift-y:0px}
+.sea-name.visible{opacity:1}
+.sea-name-title,.sea-name-reflection{display:block;font-family:"IM Fell English","Palatino Linotype",Palatino,Georgia,serif;font-size:49px;line-height:1.15;font-weight:400;letter-spacing:.015em;color:#354d49;text-shadow:0 1px 5px #e8eadb80;white-space:nowrap}
+.sea-name-reflection{position:absolute;top:55px;left:0;width:100%;transform:scaleY(-.48) skewX(-9deg);transform-origin:50% 0;opacity:.12;filter:blur(1.5px);mask-image:linear-gradient(to top,#000,transparent 90%)}
+.sea-name-rule{display:block;margin:8px auto 0;width:160px;font-size:17px;color:#586a59;background:linear-gradient(#64766450,#64766450) left center/65px 1px no-repeat,linear-gradient(#64766450,#64766450) right center/65px 1px no-repeat}
+.sea-name.visible .sea-name-title{animation:surface-ink 2.4s cubic-bezier(.2,.65,.25,1) both}
+.sea-name.visible .sea-name-rule{animation:surface-ink 2s .6s both}
+.sea-name.visible .sea-name-reflection{animation:surface-reflection 4.5s both}
+.sea-name-drift{transform:translate(var(--drift-x),var(--drift-y))}
+.seagull-hint{font-family:Georgia,serif;font-style:italic;font-size:15px;transition:opacity .5s}
+.island.name-revealed .seagull-hint{opacity:0;pointer-events:none}
+@keyframes surface-ink{0%{opacity:0;filter:blur(7px);transform:translateY(22px) skewX(-5deg);clip-path:inset(0 0 90% 0)}45%{opacity:.45;filter:blur(2px)}100%{opacity:1;filter:blur(0);transform:translateY(0) skewX(0);clip-path:inset(-20% -10% -20% -10%)}}
+@keyframes surface-reflection{0%,15%{opacity:0}50%{opacity:.19}100%{opacity:.07}}
+.scene.motion-paused .sea-name *{animation-play-state:paused}
+@media(prefers-reduced-motion:reduce){.sea-name.visible *{animation:none!important}.sea-name-reflection{display:none}}
+
+/* Floating letters in the water below Seagull Island */
+.sea-name.driftwood-name {
+  position: absolute;
+  left: 390px;
+  top: 655px;
+  width: 400px;
+  height: 100px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 2px;
+  opacity: 1;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.drift-letter {
+  display: inline-block;
+  opacity: 0;
+  font-family: "IM Fell English", "Palatino Linotype",
+    Palatino, Georgia, serif;
+  font-size: 48px;
+  font-weight: 400;
+  line-height: 1.3;
+  color: #354d49;
+  text-shadow:
+    0 2px 3px #edf0df80,
+    2px 6px 5px #45675d25;
+  transform-origin: 50% 75%;
+  will-change: transform, opacity;
+}
